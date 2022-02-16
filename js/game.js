@@ -33,6 +33,8 @@ function Level(config,isIntro){
 	self.isIntro = isIntro;
 
 	self.circles = config.circles;
+	self.semisemicles = config.semisemicles;
+	self.rects = config.rects;
 	self.player = new Peep(config.player,self);
 	self.key = new DoorKey(config.key, self);
 	self.door = new Door(config.door, self);
@@ -113,6 +115,16 @@ function Level(config,isIntro){
 			ctx.arc(c.x, c.y, c.radius, 0, Math.TAU, false);
 			ctx.fill();
 		}
+		for(var i=0;i<self.semisemicles.length;i++){
+			var c = self.semisemicles[i];
+			ctx.beginPath();
+			ctx.arc(c.x, c.y, c.radius, c.start*Math.TAU, c.end*Math.TAU, false);
+			ctx.fill();
+		}
+		for(var i=0;i<self.rects.length;i++){
+			var c = self.rects[i];
+			ctx.fillRect(c.x, c.y, c.w, c.h);
+		}
 
 		// Draw Peep, Key, Door in depth
 		objects.sort(function(a,b){ return a.y - b.y; });
@@ -184,7 +196,6 @@ function Level(config,isIntro){
 		};
 
 		self.frames.push(frame);
-
 	}
 
 	var lastCollected = false;
@@ -481,16 +492,13 @@ function Peep(config,level){
 		// Hit a circle? Figure out how deep, then add that vector away from the circle.
 
 		for(var i=0;i<level.circles.length;i++){
-
 			var circle = level.circles[i];
-
 			// Hit circle?
 			var dx = self.x-circle.x;
 			var dy = self.y-circle.y;
 			var distance = Math.sqrt(dx*dx + dy*dy);
 			var overlap = (circle.radius+5) - distance;
 			if(overlap>0){
-				
 				// Yes, I've been hit, by "overlap" pixels.
 				// Push me back
 				var ux = dx/distance;
@@ -499,9 +507,56 @@ function Peep(config,level){
 				var pushY = uy*overlap;
 				self.x += pushX;
 				self.y += pushY;
-
 			}
+		}
 
+		for(var i=0;i<level.semisemicles.length;i++){
+			var semi = level.semisemicles[i];
+			// Hit circle?
+			var dx = self.x-semi.x;
+			var dy = self.y-semi.y;
+			var distance = Math.sqrt(dx*dx + dy*dy);
+			var overlap = (semi.radius+5) - distance;
+			if(overlap>0&&((i==0&&dy>5)||(i==1&&dy<-5))){
+				// Yes, I've been hit, by "overlap" pixels.
+				// Push me back
+				var ux = dx/distance;
+				var uy = dy/distance;
+				var pushX = ux*overlap;
+				var pushY = uy*overlap;
+				self.x += pushX;
+				self.y += pushY;
+			}
+			else if(i==0&&dy>-5&&dy<5&&self.x<semi.radius)
+				self.y -= dy + 5;
+			else if(i==1&&dy>-5&&dy<5&&self.x>300-semi.radius)
+				self.y += 5 - dy;
+		}
+
+		for(var i=0;i<level.rects.length;i++){
+			var rect = level.rects[i];
+			// Hit circle?
+			var is_within_x = self.x>rect.x&&self.x<rect.x+rect.w;
+			var is_within_y = self.y>rect.y&&self.y<rect.y+rect.h
+			var is_within = is_within_x&&is_within_y;
+			if(is_within){
+				if(i==0){
+					if(self.x<rect.x+rect.w&&rect.x+rect.w-self.x<5)
+						self.x += rect.x+rect.w-self.x+5
+					else if(self.y>rect.y&&self.y-rect.y<5)
+						self.y -= self.y-rect.y+5
+					else if(rect.y+rect.h>self.y&&rect.y+rect.h-self.y<5)
+						self.y += rect.y+rect.h-self.y+5;
+				}
+				else if(i==1){
+					if(self.y>rect.y&&self.y-rect.y<5)
+						self.y-=self.y-rect.y+5;
+					if(self.x>rect.x&&self.x-rect.x<5)
+						self.x-=self.x-rect.x+5;
+					if(rect.y+rect.h>self.y&&rect.y+rect.h-self.y<5)
+						self.y+=rect.y+rect.h-self.y+5;
+				}
+			}
 		}
 
 		// Bouncy & Sway
@@ -593,9 +648,7 @@ window.onload = function(){
 		window.setTimeout(function(){
 			document.getElementById("loading").style.display = "none";
 		},300);
-
 		window.level = new Level(window.INTRO_LEVEL,true);
-
 		//////////
 
 		var frameDirty = false;
@@ -612,8 +665,8 @@ window.onload = function(){
 
 			if(STAGE==3 && !window.HAS_PLAYED_JAZZ){
 
-				if(STAGE==3 && CURRENT_LEVEL==1){
-					var framesLeft = (rewindLevel.frames.length-rewindFrame) + levelObjects[2].frames.length;
+				if(STAGE==3 && CURRENT_LEVEL==LEVEL_CONFIG.length - 2){
+					var framesLeft = (rewindLevel.frames.length-rewindFrame) + levelObjects[LEVEL_CONFIG.length - 1].frames.length;
 					if(framesLeft<135){
 						window.HAS_PLAYED_JAZZ = true;
 						createjs.Sound.play("jazz");
@@ -658,7 +711,7 @@ window.onload = function(){
 				rewindFrame++;
 				if(rewindFrame>=rewindLevel.frames.length){
 					CURRENT_LEVEL++;
-					if(CURRENT_LEVEL<3){
+					if(CURRENT_LEVEL<LEVEL_CONFIG.length){
 						startPlayback();
 					}else{
 
@@ -709,11 +762,12 @@ function next(){
 	}else{
 		level = null;
 		STAGE = 2;
-		CURRENT_LEVEL = 2;
+		CURRENT_LEVEL = LEVEL_CONFIG.length - 1;
 		startRewind();
-
-
-		var totalFrames = levelObjects[0].frames.length + levelObjects[1].frames.length + levelObjects[2].frames.length;
+		var totalFrames;
+		for (var i=0;i<LEVEL_CONFIG.length;i++)
+			totalFrames += levelObjects[i].frames.length;
+		
 		var totalRewindTime = totalFrames/60;
 		var extraTime = 6600 - totalRewindTime*1000;
 		if(extraTime<0){
@@ -723,7 +777,6 @@ function next(){
 		}
 
 		document.getElementById("rewind_text").style.display = 'block';
-
 	}
 }
 
@@ -733,18 +786,14 @@ function iHeartYou(){
 		levelObjects[i].onlyPath();
 	}
 
-	document.getElementById("canvas_container").style.backgroundPosition = "0px -390px";
+	document.getElementById("canvas_container").style.backgroundImage = "url('css/final_bg.png')";
 	document.getElementById("screen_two").style.background = "#000";
 	
 	var can_cont_text = document.getElementById("canvas_container_text");
 
 	var vtext = document.getElementById("valentines_text");
 	vtext.style.display = "block";
-	if(window.location.hash){
-		vtext.textContent = encryptString(decodeURIComponent(window.location.hash).substring(1));
-	}else{
-		vtext.textContent = "a lovely message from me to you <3";
-	}
+	vtext.textContent = "I love u forever and ever <3";
 
 	setTimeout(function(){
 		vtext.style.letterSpacing = "3px";
@@ -752,13 +801,6 @@ function iHeartYou(){
 
 	// After 9 seconds, swipe down to CREDITS.
 	// No replay. Fuck it.
-	setTimeout(function(){
-		document.getElementById("whole_container").style.top = "-200%";
-	},7300);
-	setTimeout(function(){
-		yourMessage.focus();
-	},8500);
-
 }
 
 var rewindFrame = 0;
@@ -787,90 +829,6 @@ function reset(){
 
 ///////////////////////////////////////////////////////////////////
 
-// Simple XOR encryption (key = 1)
-// The only purpose is to obscure it in the hash
-
-function encryptString(string){
-	var result = "";
-	for(var i=0;i<string.length;i++){
-		result += String.fromCharCode(string.charCodeAt(i)^1);
-	}
-	return result;
-}
-function decryptString(string){
-	return encryptString(string); // it's XOR, duh
-}
-
-var yourMessage = document.getElementById("your_message");
-var yourLink = document.getElementById("your_link");
-function linkChangey(){
-	if(yourMessage.value==""){
-		yourLink.value = "http://ncase.me/door/";
-	}else{
-		yourLink.value = "http://ncase.me/door/#"+encodeURIComponent(encryptString(yourMessage.value));
-	}
-};
-yourMessage.onchange = linkChangey;
-yourMessage.oninput = linkChangey;
-linkChangey();
-yourLink.onclick = function(){
-	yourLink.select();
-};
-
-function socialShare(event,type){
-
-	var link = yourLink.value;
-	var title = "it's a(door)able";
-	var url = "";
-	var width = 640;
-	var height = 480;
-
-	switch(type){
-		case "facebook":
-			url += "https://www.facebook.com/sharer.php?u="+encodeURIComponent(link);
-			url += "&t="+encodeURIComponent("A lovely message for all my dear friends. This minigame only takes a minute to play, check it out! it's a(door)able --");
-			width = 626;
-			height = 436;
-			break;
-		case "twitter":
-			url += "https://twitter.com/share?url="+encodeURIComponent(link);
-			url += "&text="+encodeURIComponent("A lovely message for all my dear followers, in this 1-min minigame. http://pic.twitter.com/DK5vnPzEVn"); // add twitter pic.
-			url += "&via=ncasenmare";
-			width = 640;
-			height = 400;
-			break;
-		case "plus":
-			url += "https://plus.google.com/share?url="+encodeURIComponent(link);
-			width = 600;
-			height = 460;
-			break;
-		case "tumblr":
-			url += "https://www.tumblr.com/share/link?url="+encodeURIComponent(link);
-			url += "&name="+encodeURIComponent("it's a(door)able");
-			url += "&description="+encodeURIComponent("A lovely message for all my dear followers, in this 1-min minigame.");
-			width = 446;
-			height = 430;
-			break;
-		case "reddit":
-			window.open('http://www.reddit.com/submit?v=5&amp;noui&amp;jump=close&amp;url='+encodeURIComponent(link)+'&amp;title='+encodeURIComponent("it's a(door)able: a one-minute minigame"), "reddit",'toolbar=no,width=700,height=550');
-			return false;
-			break;
-		case "stumbleupon":
-			url += "http://www.stumbleupon.com/submit?url="+encodeURIComponent(link);
-			break;
-	}
-
-	return sharePopup.call(this,event,{
-		href: url,
-		width: width,
-		height: height
-	});
-
-}
-
-
-///////////////////////////////////////////////////////////////////
-
 
 var introCanvas = document.getElementById("canvas_intro");
 introCanvas.width = window.innerWidth;
@@ -886,15 +844,56 @@ window.INTRO_LEVEL = {
 	key:{ x:cx, y:cy+125 },
 	circles: [
 		{x:cx,y:cy,radius:120,invisible:true}
-	]
-
+	],
+	semisemicles: [],
+	rects: []
 };
 
 window.LEVEL_CONFIG = [
-
-	// I
+	// C
 	{
 		canvas:document.getElementById("canvas_1"),
+		player:{ x:150, y:50 },
+		door:{ x:227, y:270 },
+		key:{ x:38, y:170 },
+		circles: [
+			{x:150,y:150,radius:100}
+		],
+		semisemicles: [],
+		rects: [],
+		countdown:90
+	},
+	// Z
+	{
+		canvas:document.getElementById("canvas_2"),
+		player:{ x:35, y:70 },
+		door:{ x:249, y:286 },
+		key:{ x:130, y:175 },
+		circles: [],
+		semisemicles: [
+			{x:0,y:75,radius:142,start:0,end:0.5},
+			{x:300,y:220,radius:142,start:0.5,end:1}
+		],
+		rects: [],
+		countdown:150
+	},
+	// Z
+	{
+		canvas:document.getElementById("canvas_3"),
+		player:{ x:150, y:172 },
+		door:{ x:260, y:287 },
+		key:{ x:40, y:77 },
+		circles: [],
+		semisemicles: [],
+		rects: [
+			{x:0,y:80,w:115,h:150},
+			{x:185,y:80,w:115,h:150}
+		],
+		countdown:12000
+	},
+	// I
+	{
+		canvas:document.getElementById("canvas_4"),
 		player:{ x:150, y:175 },
 		door:{ x:150, y:75 },
 		key:{ x:150, y:275 },
@@ -902,12 +901,14 @@ window.LEVEL_CONFIG = [
 			{x:0,y:150,radius:100},
 			{x:300,y:150,radius:100}
 		],
+		semisemicles: [],
+		rects: [],
 		countdown:90
 	},
 
 	// HEART
 	{
-		canvas:document.getElementById("canvas_2"),
+		canvas:document.getElementById("canvas_5"),
 		player:{ x:150, y:250 },
 		door:{ x:150, y:249 },
 		key:{ x:150, y:75 },
@@ -918,19 +919,23 @@ window.LEVEL_CONFIG = [
 			{x:0,y:300,radius:145},
 			{x:300,y:300,radius:145}
 		],
+		semisemicles: [],
+		rects: [],
 		// SUPER HACK - for level 2, change timer so it's impossible to beat if you go BACKWARDS.
 		countdown: 200
 	},
 
 	// U
 	{
-		canvas:document.getElementById("canvas_3"),
+		canvas:document.getElementById("canvas_6"),
 		player:{ x:30, y:75 },
 		door:{ x:270, y:75 },
 		key:{ x:150, y:270 },
 		circles: [
 			{x:150,y:150,radius:115}
 		],
+		semisemicles: [],
+		rects: [],
 		countdown: 130
 	}
 
