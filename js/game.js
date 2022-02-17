@@ -801,6 +801,9 @@ function iHeartYou(){
 
 	// After 9 seconds, swipe down to CREDITS.
 	// No replay. Fuck it.
+	setTimeout(function(){
+		window.location.href="https://avatarganymede.github.io/love/";
+	}, 9000)
 }
 
 var rewindFrame = 0;
@@ -889,7 +892,7 @@ window.LEVEL_CONFIG = [
 			{x:0,y:80,w:115,h:150},
 			{x:185,y:80,w:115,h:150}
 		],
-		countdown:12000
+		countdown:120
 	},
 	// I
 	{
